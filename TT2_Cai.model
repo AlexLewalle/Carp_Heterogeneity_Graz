@@ -1,0 +1,351 @@
+
+
+V; .external(Vm); .nodal();
+Iion; .external(); .nodal();
+
+
+group {
+  V;
+  VEk = V - Ek;
+} .lookup(-800,800,0.05); .units(mV);
+CaSS; .lookup( .00001,10.0,.00001);
+
+
+//Intracellular calcium flux dynamics
+k1_ = 0.15;
+k2_ = 0.045;
+k3 = 0.060;
+k4 = 0.005;             // 0.000015 -> wrong value in published article
+EC = 1.5;
+maxsr = 2.5;
+minsr = 1.;
+Vxfer = 0.0038;
+
+RTONF = (Rconst*T)/Fconst;
+F_RT = 1/RTONF;
+
+EPI = 0;
+MCELL = 1;
+ENDO = 2;
+cell_type = EPI; .flag(EPI,MCELL,ENDO);
+
+
+group {
+
+  //External concentrations
+  Ko = 5.4;
+  Cao = 2.0;
+  Nao = 140.0;
+
+  //Intracellular volumes
+  Vc = 0.016404;    // L
+  Vsr = 0.001094;
+  Vss = 0.00005468;
+
+  //Calcium buffering dynamics
+  Bufc = 0.2;                     // 0.15 in TT
+  Kbufc = 0.001;
+  Bufsr = 10.;
+  Kbufsr = 0.3;
+  Bufss = 0.4;
+  Kbufss = 0.00025;
+
+  Vmaxup = 0.006375;      // 0.000425 in TT1
+  Kup = 0.00025;          // 0.00025 in TT1
+
+  //Constants
+  Rconst = 8314.472;
+  Fconst = 96485.3415;
+  T = 310.0;
+
+  //Cellular capacitance
+  CAPACITANCE = 0.185;
+
+  //Parameters for currents
+  //Parameters for IKr
+  Gkr = 0.153;    // 0.096 in TT1
+
+  //Parameters for Iks
+  pKNa = 0.03;
+  if (cell_type == EPI) {
+    Gks = 0.392;    // 0.245 in TT1
+    Gto = 0.294;
+  } elif (cell_type == MCELL) {
+    Gks = 0.098;    // 0.062 in TT1
+    Gto = 0.294;
+  } else {
+    Gks = 0.392;    // 0.245 in TT1
+    Gto = 0.073;
+  }
+
+  //Parameters for Ik1
+  GK1 = 5.405;
+  //Parameters for Ito
+  //Parameters for INa
+  GNa = 14.838;
+  //Parameters for IbNa
+  GbNa = 0.00029;
+  //Parameters for INaK
+  KmK = 1.0;
+  KmNa = 40.0;
+  knak = 2.724;           // 1.362 in TT1
+  //Parameters for ICaL
+  GCaL = 0.00003980;      // 0.000175 in TT1
+  //Parameters for IbCa
+  GbCa = 0.000592;
+  //Parameters for INaCa
+  knaca = 1000;
+  KmNai = 87.5;
+  KmCa = 1.38;
+  ksat = 0.1;
+  n = 0.35;
+  //Parameters for IpCa
+  GpCa = 0.1238;          // 0.825 in TT1
+  KpCa = 0.0005;
+  //Parameters for IpK;
+  GpK = 0.0146;
+  scl_tau_f = 1;
+  xr2_off   = 0;
+
+  Vleak = 0.00036;
+  Vrel  = 0.102;           // 40.8 -> wrong value in published article
+  D_CaL_off = 0;           // shift I_CaL activation
+
+  CaiClamp = 1;
+  CaiSET = 7e-5;
+}.param();
+
+KmNai3         = KmNai*KmNai*KmNai;
+Nao3           = Nao*Nao*Nao;
+invKmCa_Cao    = 1./(KmCa+Cao);
+invKmNai3_Nao3 = 1./(KmNai3+Nao3);
+pmf_INaCa      = knaca*invKmNai3_Nao3*invKmCa_Cao;
+
+
+/*
+ *  INITIAL CONDTIONS
+ */
+V_init = -86.2;
+Ca_i_init = CaiSET;  .units(mM); // 0.0002 mM in TT1
+CaSR_init = 1.3;      // 0.2 in TT1
+CaSS_init = 0.00007;  // new in TT2
+R__init = 1.;       // new in TT2
+O_init = 0.;       // new in TT2
+Na_i_init = 7.67;     // 11.6 in TT1
+K_i_init = 138.3;
+M_init = 0.;
+H_init = 0.75;
+J_init = 0.75;
+Xr1_init = 0.;
+Xr2_init = 1.;
+Xs_init = 0.;
+R_init = 0.;
+S_init = 1.;
+d_init = 0.;
+F_init = 1.;
+F2_init = 1.;
+FCaSS_init = 1.;
+
+aa_M   = 1./(1.+exp((-60.-V)/5.));
+bb_M   = 0.1/(1.+exp((V+35.)/5.))+0.10/(1.+exp((V-50.)/200.));
+tau_M = aa_M * bb_M;
+M_inf = 1./((1.+exp((-56.86-V)/9.03))*(1.+exp((-56.86-V)/9.03)));
+
+aa_H = ((V>=-40.)
+        ? 0
+        : (0.057*exp(-(V+80.)/6.8))
+        );
+bb_H = ((V>=-40.)
+        ? (0.77/(0.13*(1.+exp(-(V+10.66)/11.1))))
+        : (2.7*exp(0.079*V)+(3.1e5)*exp(0.3485*V))
+        );
+tau_H = 1.0/(aa_H+bb_H);
+H_inf = 1./((1.+exp((V+71.55)/7.43))*(1.+exp((V+71.55)/7.43)));
+
+aa_J = ((V>=-40.)
+        ? 0
+        : (((-2.5428e4)*exp(0.2444*V)-(6.948e-6)*
+                exp(-0.04391*V))*(V+37.78)/
+               (1.+exp(0.311*(V+79.23))))
+        );
+bb_J = ((V>=-40.)
+        ? (0.6*exp((0.057)*V)/(1.+exp(-0.1*(V+32.))))
+        : (0.02424*exp(-0.01052*V)/(1.+exp(-0.1378*(V+40.14))))
+        );
+tau_J = 1.0/(aa_J + bb_J);
+J_inf = H_inf;
+
+Xr1_inf = 1./(1.+exp((-26.-V)/7.));
+aa_Xr1   = 450./(1.+exp((-45.-V)/10.));
+bb_Xr1   = 6./(1.+exp((V-(-30.))/11.5));
+tau_Xr1 = aa_Xr1*bb_Xr1;
+
+Xr2_inf = 1./(1.+exp((V-(-88.+xr2_off))/24.));
+aa_Xr2   = 3./(1.+exp((-60.-V)/20.));
+bb_Xr2   = 1.12/(1.+exp((V-60.)/20.));
+tau_Xr2 = aa_Xr2*bb_Xr2;
+
+Xs_inf  = 1./(1.+exp((-5.-V)/14.));
+aa_Xs    = (1400./(sqrt(1.+exp((5.-V)/6))));
+bb_Xs    = (1./(1.+exp((V-35.)/15.)));
+tau_Xs  = aa_Xs*bb_Xs+80;
+
+R_inf = 1./(1.+exp((20-V)/6.));
+tau_R = 9.5*exp(-(V+40.)*(V+40.)/1800.)+0.8;
+S_inf = 1./(1.+exp((V+20)/5.));
+if (cell_type == ENDO) {
+   tau_S = 1000.*exp(-(V+67)*(V+67)/1000.)+8.;
+} else {
+   tau_S = 85.*exp(-(V+45.)*(V+45.)/320.)+5./(1.+exp((V-20.)/5.))+3.;
+}
+
+// ICaL
+D_inf = 1./(1.+exp((-8+D_CaL_off-V)/7.5));
+aa_D   = 1.4/(1.+exp((-35-V)/13))+0.25;
+bb_D   = 1.4/(1.+exp((V+5)/5));
+cc_D   = 1./(1.+exp((50-V)/20));
+tau_D = aa_D*bb_D+cc_D;
+
+F_inf = 1./(1.+exp((V+20)/7));
+aa_F  = 1102.5*exp(-(V+27)*(V+27)/225);
+bb_F  =  200./(1+exp((13-V)/10.));
+cc_F  = (180./(1+exp((V+30)/10)))+20;
+tau_F_factor = aa_F + bb_F + cc_F;
+tau_F = ((V > 0)
+         ? tau_F_factor*scl_tau_f
+         : tau_F_factor
+         );
+
+// new in TT2
+F2_inf    =   0.67/(1.+exp((V+35)/7))+0.33;
+aa_F2      = 562*exp(-(V+27)*(V+27)/240);
+bb_F2      =  31/(1.+exp((25-V)/10));
+cc_F2      =  80/(1.+exp((V+30)/10));
+tau_F2    = (aa_F2 + bb_F2 + cc_F2);
+
+a1     = GCaL*Fconst*F_RT*4*((V==15)?(1./2*F_RT):(V-15)/ expm1(2*(V-15)*F_RT));
+a2     = 0.25*exp(2*(V-15)*F_RT);
+ICaL_A = a1*a2;
+ICaL_B = a1*Cao;
+
+// INaK
+rec_iNaK  = (1./(1.+0.1245*exp(-0.1*V*F_RT)+0.0353*exp(-V*F_RT)));
+
+// IpK
+rec_ipK   = 1./(1.+exp((25-V)/5.98));
+
+// INaCa
+den     = pmf_INaCa / (1+ksat*exp((n-1)*V*F_RT));
+INaCa_A = den * Cao * exp(n*V*F_RT);
+INaCa_B = den * exp((n-1)*V*F_RT)*Nao3*2.5;
+
+// IK1 (optional due to Ek dependence)
+a_K1= 0.1 / (1.+exp(0.06*(VEk-200)));
+b_K1= (3.*exp(0.0002*(VEk+100))+
+       exp(0.1*(VEk-10)))/(1.+exp(-0.5*(VEk)));
+rec_iK1  = a_K1/(a_K1+b_K1);
+
+
+FCaSS_inf   =  0.6/(1+(CaSS/0.05)*(CaSS/0.05))+0.4;
+tau_FCaSS   = (80./(1+(CaSS/0.05)*(CaSS/0.05))+2.);
+
+inverseVcF2    = 1/(2*Vc*Fconst);
+inverseVcF     = 1./(Vc*Fconst);
+invVcF_Cm      = inverseVcF *CAPACITANCE;
+inverseVssF2   = 1/(2*Vss*Fconst);
+pmf_INaK       = knak*(Ko/(Ko+KmK));
+
+Ek = RTONF*(log( (Ko /K_i  )));
+Ena= RTONF*(log( (Nao/Na_i )));
+Eks= RTONF*(log( (Ko+pKNa*Nao)/(K_i+pKNa*Na_i)));
+Eca= 0.5*RTONF*(log((Cao/Ca_i)));
+
+
+// Compute currents
+INa   = GNa*M*M*M*H*J*(V-Ena);
+ICaL  = D*F*F2*FCaSS*(ICaL_A*CaSS-ICaL_B);
+Ito   = Gto*R*S*(V-Ek);
+sqrt_Ko = sqrt(Ko/5.4);
+IKr   = Gkr*sqrt_Ko*Xr1*Xr2*(V-Ek);
+IKs   = Gks*Xs*Xs*(V-Eks);
+IK1   = GK1*rec_iK1*(V-Ek);
+INaCa = INaCa_A*Na_i*Na_i*Na_i-INaCa_B*Ca_i;
+INaK  = pmf_INaK*(Na_i/(Na_i+KmNa))*rec_iNaK;
+IpCa  = GpCa*Ca_i/(KpCa+Ca_i);
+IpK   = GpK*rec_ipK*(V-Ek);
+IbNa  = GbNa*(V-Ena);
+IbCa  = GbCa*(V-Eca);
+
+// Determine total current
+Iion = IKr   +
+       IKs   +
+       IK1   +
+       Ito   +
+       INa   +
+       IbNa  +
+       ICaL  +
+       IbCa  +
+       INaK  +
+       INaCa +
+       IpCa  +
+       IpK;
+// update concentrations
+kCaSR     = maxsr-((maxsr-minsr)/(1+(EC/CaSR)*(EC/CaSR)));
+k1        = k1_/kCaSR;
+diff_R_   = k4*(1-R_)-k2_*kCaSR*CaSS*R_;
+CaSS2     = CaSS*CaSS;
+O         = k1*CaSS2*R_/(k3+k1*CaSS2);
+
+Irel       = Vrel*O*(CaSR-CaSS);
+Ileak      = Vleak*(CaSR-Ca_i);
+Iup        = Vmaxup/(1.+((Kup*Kup)/(Ca_i*Ca_i)));
+Ixfer      = Vxfer*(CaSS-Ca_i);
+
+//CaCSQN     = Bufsr*CaSR/(CaSR+Kbufsr);
+diff_CaSR      = (Iup-Irel-Ileak)/(1+Bufsr*Kbufsr/(CaSR+Kbufsr)/(CaSR+Kbufsr));
+//bjsr       = Bufsr-CaCSQN-dCaSR-CaSR+Kbufsr;
+//cjsr       = Kbufsr*(CaCSQN+dCaSR+CaSR);
+
+//CaSSBuf    = Bufss*CaSS/(CaSS+Kbufss);
+diff_CaSS      = (-Ixfer*(Vc/Vss)+Irel*(Vsr/Vss)+(-ICaL*inverseVssF2*CAPACITANCE))
+  /(1+Bufss*Kbufss/(CaSS+Kbufss)/(CaSS+Kbufss));
+//bcss       = Bufss-CaSSBuf-dCaSS-CaSS+Kbufss;
+//ccss       = Kbufss*(CaSSBuf+dCaSS+CaSS);
+
+
+// update Bulk Cai
+//CaBuf      = Bufc*Ca_i/(Ca_i+Kbufc);
+diff_Ca_i  = CaiClamp * ((Ixfer-(IbCa+IpCa-2*INaCa)*inverseVcF2*CAPACITANCE)-(Iup-Ileak)*(Vsr/Vc))
+  /(1+ Bufc*Kbufc/(Kbufc+Ca_i)/(Kbufc+Ca_i)); .units(mM/ms);
+//bc         = Bufc-CaBuf-dCai-Ca_i+Kbufc;
+//cc         = Kbufc*(CaBuf+dCai+Ca_i);
+
+Ca_i; .units(mM);
+diff_Na_i       = -(INa+IbNa+3*INaK+3*INaCa)*invVcF_Cm;
+diff_K_i        = -(IK1+Ito+IKr+IKs-2*INaK+IpK)*invVcF_Cm;
+
+group {
+    GCaL;
+    Gks;
+    Gkr;
+    Gto;
+}.nodal();
+
+group {
+ IKr;
+ IKs;
+ IK1;
+ Ito;
+ INa;
+ IbNa;
+ ICaL;
+ IbCa;
+ INaK;
+ INaCa;
+ IpCa;
+ IpK;
+ Ca_i;
+ CaSS;
+ CaSR;
+ V;
+} .trace();
